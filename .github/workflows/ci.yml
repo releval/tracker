@@ -172,7 +172,7 @@ jobs:
             BASE_VERSION=$(node -p "require('./package.json').version")
             VERSION="${BASE_VERSION}-dev.${SHORT_SHA}"
           fi
-          npm version "$VERSION" --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
           echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - run: npm run build

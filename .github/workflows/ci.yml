@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/tracker
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: src/tracker/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run docs:check
+      - run: npm run build
+      - run: npm test -- --coverage --coverageReporters=text-summary --coverageReporters=lcov 2>&1 | tee test-output.txt
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo '### Coverage' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          sed -n '/Coverage summary/,$ p' test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-report
+          path: src/tracker/coverage/
+
+  build-examples:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            src/tracker/package-lock.json
+            examples/react-spa/package-lock.json
+
+      - name: Build library
+        working-directory: src/tracker
+        run: npm ci && npm run build
+
+      - name: Build React SPA example
+        working-directory: examples/react-spa
+        run: npm ci && npm run build
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/tracker/package-lock.json
+            examples/react-spa/package-lock.json
+
+      - name: Build library
+        working-directory: src/tracker
+        run: npm ci && npm run build
+
+      - name: Install React SPA deps
+        working-directory: examples/react-spa
+        run: npm ci
+
+      - name: Install Playwright
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+  integration-tests:
+    # Boots a real Releval stack (Postgres + ClickHouse + the releval/releval image)
+    # with Testcontainers and asserts the tracker's events land in ClickHouse.
+    # Heavy (pulls a ~1.3GB image), so it is its own job, not part of build-and-test,
+    # and it is skipped for pull requests from forks: anonymous Docker Hub pull limits
+    # make it unreliable there, and a contributor cannot fix a failure they caused.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/tracker/package-lock.json
+
+      - name: Install tracker deps
+        working-directory: src/tracker
+        run: npm ci
+
+      - name: Install integration deps
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run integration tests against releval/releval
+        run: npm run test:integration
+        env:
+          # TODO(release): pin to releval/releval:1.1.0 once that image is
+          # on Docker Hub - "works with v1.1.0" should be a gate, not a claim.
+          RELEVAL_IMAGE: releval/releval:latest
+
+  package:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    defaults:
+      run:
+        working-directory: src/tracker
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: src/tracker/package-lock.json
+
+      - run: npm ci
+
+      - name: Set package version
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+          else
+            SHORT_SHA="${GITHUB_SHA::7}"
+            BASE_VERSION=$(node -p "require('./package.json').version")
+            VERSION="${BASE_VERSION}-dev.${SHORT_SHA}"
+          fi
+          npm version "$VERSION" --no-git-tag-version
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - run: npm run build
+
+      - run: npm pack
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: src/tracker/releval-tracker-*.tgz
+
+  publish:
+    # Publishes the exact tarball the rest of the workflow built and tested,
+    # over npm trusted publishing (OIDC). No npm token is involved.
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    needs: [build-examples, e2e-tests, integration-tests, package]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; setup-node ships 10.x with Node 22.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-package
+
+      - name: Publish to npm
+        run: npm publish ./releval-tracker-*.tgz --provenance --access public

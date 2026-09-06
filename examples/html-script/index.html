@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RelevalTech Store - ubi-tracker HTML Example</title>
+
+  <!-- Load the IIFE build (deferred so it runs after DOM parse) -->
+  <script defer src="../../src/tracker/dist/releval-tracker.global.js"></script>
+  <script defer src="shared.js"></script>
+  <script defer src="tracker-setup.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header id="site-header" class="header"></header>
+
+  <!-- Page heading -->
+  <h1 id="page-heading" style="max-width:1200px;margin:24px auto 0;padding:0 24px;font-size:24px;font-weight:700;color:#1A202C">All Products</h1>
+
+  <!-- Search -->
+  <section class="search-section" style="position:relative">
+    <form id="search-form" class="search-form">
+      <input type="text" id="search-input" placeholder="Search products... (try 'audio', 'camera', 'smart')" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
+    <div id="search-suggestions" class="search-suggestions" style="display:none"></div>
+  </section>
+
+  <!-- Category navigation (demonstrates SPA-style navigation tracking) -->
+  <nav class="category-nav">
+    <button class="category-btn active" data-category="all">All</button>
+    <button class="category-btn" data-category="Audio">Audio</button>
+    <button class="category-btn" data-category="Wearables">Wearables</button>
+    <button class="category-btn" data-category="Tablets">Tablets</button>
+    <button class="category-btn" data-category="Accessories">Accessories</button>
+    <button class="category-btn" data-category="Cameras">Cameras</button>
+    <button class="category-btn" data-category="Storage">Storage</button>
+    <button class="category-btn" data-category="Input">Input</button>
+    <button class="category-btn" data-category="Networking">Networking</button>
+    <button class="category-btn" data-category="Smart Home">Smart Home</button>
+  </nav>
+
+  <!-- Product grid (generated from shared.js products array) -->
+  <main id="product-grid" class="product-grid"></main>
+
+  <!-- Event log panel -->
+  <button id="event-log-toggle" class="event-log-toggle">Events <span id="event-count" class="badge">0</span></button>
+  <div id="event-log-panel" class="event-log-panel">
+    <div class="event-log-header">
+      <div class="event-log-header-row">
+        <h3>Event Log</h3>
+        <button id="event-log-clear" class="event-log-clear">Clear</button>
+      </div>
+      <div id="event-log-ids" class="event-log-ids"></div>
+    </div>
+    <div id="event-log-entries" class="event-log-entries"></div>
+  </div>
+
+  <script>
+  // ================================================================
+  // Catalog Page Initialization
+  // ================================================================
+  document.addEventListener('DOMContentLoaded', function() {
+    // Render header and event log
+    renderHeader();
+    initEventLog();
+
+    // Check for ?q= query parameter and apply initial search
+    var urlParams = new URLSearchParams(window.location.search);
+    var initialQuery = urlParams.get('q') || '';
+    if (initialQuery) {
+      document.getElementById('search-input').value = initialQuery;
+      currentQuery = initialQuery;
+      // A real site renders the results (and the query_id) server-side;
+      // mockSearchApi (hoisted below) stands in for that round-trip on a
+      // direct ?q= load.
+      var initialSearch = mockSearchApi(initialQuery);
+      currentQueryId = initialSearch.queryId;
+      tracker.trackSearch({ query: initialQuery, queryId: initialSearch.queryId });
+    }
+
+    // Generate product grid from products array (filtered if ?q= present)
+    renderGrid();
+
+    // Result clicks, viewport impressions and add-to-cart conversions are
+    // bound declaratively ONCE in tracker-setup.js. The grid rendered
+    // below carries the data attributes those collectors read:
+    // data-query-id / data-query on the container, data-object-id /
+    // data-ordinal on each card.
+
+    var searchInput = document.getElementById('search-input');
+
+    // Simulates a search backend returning a server-issued query_id. In a real
+    // integration this id comes from your server, which registered the query with
+    // Releval (POST /api/v1/ubi/track-query) and returned it. The query_id is what
+    // makes result clicks and impressions joinable back to the query for
+    // relevance analysis.
+    function mockSearchApi(query) {
+      return {
+        queryId: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())
+      };
+    }
+
+    // A search submit reports the search itself (a canonical `search` event
+    // with message_type QUERY - so even a query with no clicks leaves a row
+    // for abandonment analysis) and re-renders the grid as a results
+    // container carrying the query_id.
+    document.getElementById('search-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      // Close the suggestions dropdown so it cannot sit over the results.
+      var suggestions = document.getElementById('search-suggestions');
+      if (suggestions) suggestions.style.display = 'none';
+      var query = searchInput.value.trim();
+      if (query.length >= 2) {
+        var search = mockSearchApi(query);
+        currentQueryId = search.queryId;
+        tracker.trackSearch({ query: query, queryId: search.queryId });
+      } else {
+        currentQueryId = null;
+      }
+      filterProducts(query);
+    });
+
+    // Search suggestions (autocomplete dropdown)
+    var suggestionsEl = document.getElementById('search-suggestions');
+    var suggestionMatches = [];
+    var activeIndex = -1;
+
+    function updateSuggestionHighlight() {
+      var items = suggestionsEl.querySelectorAll('.search-suggestion');
+      items.forEach(function(item, i) {
+        item.classList.toggle('active', i === activeIndex);
+      });
+    }
+
+    function selectSuggestion(index) {
+      var product = suggestionMatches[index];
+      suggestionsEl.style.display = 'none';
+      activeIndex = -1;
+      window.location.href =
+        (index < 2 ? 'promotion.html?id=' : 'product.html?id=') + product.id;
+    }
+
+    searchInput.addEventListener('input', function() {
+      activeIndex = -1;
+      var val = searchInput.value.trim();
+      if (val.length < 2) {
+        suggestionsEl.style.display = 'none';
+        suggestionMatches = [];
+        return;
+      }
+      var q = val.toLowerCase();
+      suggestionMatches = products.filter(function(p) {
+        return p.name.toLowerCase().indexOf(q) !== -1 ||
+               p.category.toLowerCase().indexOf(q) !== -1 ||
+               p.description.toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 5);
+      if (suggestionMatches.length === 0) {
+        suggestionsEl.style.display = 'none';
+        return;
+      }
+      suggestionsEl.innerHTML = suggestionMatches.map(function(p, i) {
+        var badge = i < 2 ? ' <span class="suggestion-promoted">PROMOTED</span>' : '';
+        return '<div class="search-suggestion" data-suggestion-index="' + i + '">' +
+          '<div><span class="suggestion-name">' + p.name + badge + '</span><br>' +
+          '<span class="suggestion-category">' + p.category + '</span></div>' +
+          '<span class="suggestion-price">$' + p.price.toFixed(2) + '</span>' +
+        '</div>';
+      }).join('');
+      suggestionsEl.style.display = 'block';
+    });
+    searchInput.addEventListener('keydown', function(e) {
+      if (suggestionsEl.style.display === 'none' || suggestionMatches.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = activeIndex < suggestionMatches.length - 1 ? activeIndex + 1 : 0;
+        updateSuggestionHighlight();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = activeIndex > 0 ? activeIndex - 1 : suggestionMatches.length - 1;
+        updateSuggestionHighlight();
+      } else if (e.key === 'Enter' && activeIndex >= 0) {
+        e.preventDefault();
+        selectSuggestion(activeIndex);
+      } else if (e.key === 'Escape') {
+        suggestionsEl.style.display = 'none';
+        activeIndex = -1;
+      }
+    });
+    suggestionsEl.addEventListener('click', function(e) {
+      var el = e.target.closest('.search-suggestion');
+      if (!el) return;
+      selectSuggestion(parseInt(el.dataset.suggestionIndex));
+    });
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-section')) {
+        suggestionsEl.style.display = 'none';
+        activeIndex = -1;
+      }
+    });
+
+    // Category navigation (demonstrates navigation tracking via pushState)
+    document.querySelectorAll('.category-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var category = this.dataset.category;
+        document.querySelectorAll('.category-btn').forEach(function(b) { b.classList.remove('active'); });
+        this.classList.add('active');
+        history.pushState({ category: category }, '', '?category=' + encodeURIComponent(category));
+        filterByCategory(category);
+      });
+    });
+  });
+
+  // ================================================================
+  // Product Filtering
+  // ================================================================
+  var currentQuery = '';
+  var currentQueryId = null;
+  var currentCategory = 'all';
+
+  function updateHeading() {
+    var heading = document.getElementById('page-heading');
+    if (!heading) return;
+    if (currentQuery) {
+      heading.textContent = 'Products matching \u201C' + currentQuery + '\u201D';
+    } else {
+      heading.textContent = 'All Products';
+    }
+  }
+
+  function updateUrl() {
+    var url = new URL(window.location);
+    if (currentQuery) {
+      url.searchParams.set('q', currentQuery);
+    } else {
+      url.searchParams.delete('q');
+    }
+    history.replaceState(null, '', url);
+  }
+
+  function renderGrid() {
+    var grid = document.getElementById('product-grid');
+    var filtered = products.filter(function(p) {
+      if (currentCategory !== 'all' && p.category !== currentCategory) return false;
+      if (currentQuery) {
+        var text = (p.name + ' ' + p.category + ' ' + p.description).toLowerCase();
+        if (text.indexOf(currentQuery.toLowerCase()) === -1) return false;
+      }
+      return true;
+    });
+
+    // The container declares which search produced these results. The
+    // declarative collectors read data-query-id from here, so clicks and
+    // impressions inside the grid are joinable; without a search the
+    // attributes are absent and the cards are not result events.
+    if (currentQuery && currentQueryId) {
+      grid.setAttribute('data-query-id', currentQueryId);
+      grid.setAttribute('data-query', currentQuery);
+    } else {
+      grid.removeAttribute('data-query-id');
+      grid.removeAttribute('data-query');
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = '<div class="no-results">No products found. Try a different search.</div>';
+    } else {
+      grid.innerHTML = filtered.map(function(p, i) {
+        return renderProductCard(p, i + 1);
+      }).join('');
+    }
+
+    updateHeading();
+  }
+
+  function filterProducts(query) {
+    currentQuery = query || '';
+    updateUrl();
+    renderGrid();
+  }
+
+  function filterByCategory(category) {
+    currentCategory = category;
+    currentQuery = '';
+    currentQueryId = null;
+    document.getElementById('search-input').value = '';
+    updateUrl();
+    renderGrid();
+  }
+  </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Mark binary files explicitly to avoid line ending conversion
+*.png binary

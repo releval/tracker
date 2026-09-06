@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest something the tracker should be able to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        Describe the integration you are building and where the library gets in
+        the way. What you are trying to achieve is more useful than a proposed
+        API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do today
+      description: >
+        The workaround you are using, if any, including anything you had to
+        build on top of `addEnricher`, `addSink` or `dispatch`.
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. A sketch of the API, if you have one.

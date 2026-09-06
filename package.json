@@ -1,0 +1,24 @@
+{
+  "name": "releval-tracker-workspace",
+  "version": "1.0.0",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:html": "playwright test --project=html-script",
+    "test:e2e:react": "playwright test --project=react-spa",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:html:headed": "playwright test --project=html-script --headed",
+    "test:e2e:react:headed": "playwright test --project=react-spa --headed",
+    "test:integration": "npm --prefix src/tracker run build && playwright test -c integration/playwright.config.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "description": "Workspace harness for @releval/tracker: e2e and integration suites",
+  "devDependencies": {
+    "@clickhouse/client": "^1.23.1",
+    "@playwright/test": "^1.63.0",
+    "http-server": "^14.1.1",
+    "testcontainers": "^12.1.0"
+  },
+  "private": true
+}

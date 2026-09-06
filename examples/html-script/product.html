@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product - RelevalTech Store</title>
+  <script defer src="../../src/tracker/dist/releval-tracker.global.js"></script>
+  <script defer src="shared.js"></script>
+  <script defer src="tracker-setup.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="site-header" class="header"></header>
+
+  <div id="content" class="container container-product"></div>
+
+  <button id="event-log-toggle" class="event-log-toggle">Events <span id="event-count" class="badge">0</span></button>
+  <div id="event-log-panel" class="event-log-panel">
+    <div class="event-log-header">
+      <div class="event-log-header-row">
+        <h3>Event Log</h3>
+        <button id="event-log-clear" class="event-log-clear">Clear</button>
+      </div>
+      <div id="event-log-ids" class="event-log-ids"></div>
+    </div>
+    <div id="event-log-entries" class="event-log-entries"></div>
+  </div>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    renderHeader();
+    initEventLog();
+
+    var params = new URLSearchParams(window.location.search);
+    var productId = params.get('id');
+    var product = getProduct(productId);
+    var content = document.getElementById('content');
+
+    if (!product) {
+      document.title = 'Product Not Found - RelevalTech Store';
+      content.innerHTML =
+        '<div class="not-found">' +
+          '<h1>Product not found</h1>' +
+          '<p><a href="index.html">Back to catalog</a></p>' +
+        '</div>';
+      return;
+    }
+
+    document.title = product.name + ' - RelevalTech Store';
+
+    var related = getRelatedProducts(product.id, 4);
+
+    content.innerHTML =
+      '<div class="breadcrumb"><a href="index.html">&larr; Back to catalog</a></div>' +
+      '<div class="product-detail">' +
+        '<div class="product-detail-svg">' + product.svg + '</div>' +
+        '<div class="product-info">' +
+          '<span class="category-badge">' + product.category + '</span>' +
+          '<h1>' + product.name + '</h1>' +
+          '<p class="price">$' + product.price.toFixed(2) + '</p>' +
+          '<p class="description">' + product.description + '</p>' +
+          '<div class="add-to-cart-row">' +
+            '<input type="number" id="qty" class="quantity-input" value="1" min="1" max="99">' +
+            '<button class="btn-add-to-cart" data-add-to-cart data-object-id="' + product.id + '" data-action-name="add_to_cart" id="add-to-cart-btn">Add to Cart</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      (related.length > 0 ?
+        '<div class="related-section">' +
+          '<h2>Related Products</h2>' +
+          '<div class="related-grid">' +
+            related.map(function(p, i) {
+              return renderProductCard(p, i + 1, { small: true });
+            }).join('') +
+          '</div>' +
+        '</div>'
+      : '');
+
+    // Wire add-to-cart button
+    document.getElementById('add-to-cart-btn').addEventListener('click', function() {
+      var qty = parseInt(document.getElementById('qty').value) || 1;
+      addToCart(product.id, qty);
+    });
+
+    // Page-specific tracking (tracker is available globally from tracker-setup.js)
+
+    // Emit a canonical view event for this product. When the user arrived
+    // by clicking a search result, the tracker resolves the originating
+    // query_id and ordinal from the click it recorded - across the full
+    // page navigation - so this view joins back to the search.
+    tracker.trackResultEvent({
+      actionName: 'view',
+      objectId: product.id,
+      objectIdField: 'product_id'
+    });
+
+    // Add-to-cart is reported by the conversion collector bound in
+    // tracker-setup.js (the button carries data-action-name), resolving
+    // the originating query automatically. Related product cards sit
+    // outside any [data-query-id] container, so they are deliberately
+    // not reported as result clicks - an unjoinable click is noise for
+    // relevance analysis.
+  });
+  </script>
+</body>
+</html>

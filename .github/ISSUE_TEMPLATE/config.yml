@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Browser tracker guide
+    url: https://releval.co/docs/user-behavior-insights/browser-tracker
+    about: How to integrate the tracker with a Releval deployment.
+  - name: Releval product issues and roadmap
+    url: https://github.com/releval/tickets
+    about: Anything about the Releval server, its APIs or its documentation.

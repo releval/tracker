@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ubi-tracker integration fixture</title>
+    <script src="/src/tracker/dist/releval-tracker.global.js"></script>
+  </head>
+  <body>
+    <h1>Search results</h1>
+    <ul id="results">
+      <li>
+        <button id="result" data-product-id="NT-001" data-position="1">
+          Wireless Noise Cancelling Headphones
+        </button>
+        <button id="convert">Add to cart</button>
+      </li>
+    </ul>
+
+    <script>
+      // Config is threaded in from the test via URL params, mirroring how a real
+      // integration receives endpointHost/siteId from its own config and a
+      // server-issued query_id from its search backend.
+      var params = new URLSearchParams(location.search);
+      var queryId = params.get("queryId");
+
+      var tracker = new Releval.Tracker({
+        application: "integration-test",
+        siteId: params.get("siteId"),
+        endpointHost: params.get("endpoint"),
+      });
+
+      // Declare the search with the server-issued query_id (the SPA-direct path:
+      // the app fires events itself rather than using the DOM collectors).
+      tracker.trackSearch({ query: params.get("query"), queryId: queryId });
+
+      // Instrument the result click with the high-level API - query_id is
+      // required at the call site and the canonical event shape is built for us.
+      document.getElementById("result").addEventListener("click", function () {
+        tracker.trackResultClick({
+          objectId: this.dataset.productId,
+          ordinal: Number(this.dataset.position),
+          objectIdField: "product_id",
+          queryId: queryId,
+        });
+      });
+
+      // Conversion WITHOUT an explicit queryId: it must resolve from the
+      // attribution the tracker recorded when the result was clicked.
+      document.getElementById("convert").addEventListener("click", function () {
+        tracker.trackResultEvent({
+          actionName: "add_to_cart",
+          objectId: "NT-001",
+          objectIdField: "product_id",
+        });
+      });
+
+      tracker.start();
+      window.__trackerReady = true;
+    </script>
+  </body>
+</html>

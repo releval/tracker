@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cart - RelevalTech Store</title>
+  <script defer src="../../src/tracker/dist/releval-tracker.global.js"></script>
+  <script defer src="shared.js"></script>
+  <script defer src="tracker-setup.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="site-header" class="header"></header>
+
+  <div id="content" class="container"></div>
+
+  <button id="event-log-toggle" class="event-log-toggle">Events <span id="event-count" class="badge">0</span></button>
+  <div id="event-log-panel" class="event-log-panel">
+    <div class="event-log-header">
+      <div class="event-log-header-row">
+        <h3>Event Log</h3>
+        <button id="event-log-clear" class="event-log-clear">Clear</button>
+      </div>
+      <div id="event-log-ids" class="event-log-ids"></div>
+    </div>
+    <div id="event-log-entries" class="event-log-entries"></div>
+  </div>
+
+  <script>
+  function renderCart() {
+    var content = document.getElementById('content');
+    var cart = getCart();
+
+    if (cart.length === 0) {
+      content.innerHTML =
+        '<h1>Shopping Cart</h1>' +
+        '<div class="empty-cart">' +
+          '<p>Your cart is empty.</p>' +
+          '<a href="index.html" class="btn-browse">Browse Catalog</a>' +
+        '</div>';
+      return;
+    }
+
+    var itemsHtml = cart.map(function(item) {
+      var p = getProduct(item.productId);
+      if (!p) return '';
+      var lineTotal = (p.price * item.quantity).toFixed(2);
+      return '<div class="cart-item" data-cart-item data-product-id="' + p.id + '">' +
+        '<div class="cart-item-thumb">' + p.svg + '</div>' +
+        '<div class="cart-item-info">' +
+          '<h3><a href="product.html?id=' + p.id + '">' + p.name + '</a></h3>' +
+          '<span class="item-price">$' + p.price.toFixed(2) + ' each</span>' +
+        '</div>' +
+        '<div class="cart-item-controls">' +
+          '<input type="number" class="qty-input" data-product-id="' + p.id + '" value="' + item.quantity + '" min="1" max="99">' +
+          '<button class="btn-remove" data-remove data-product-id="' + p.id + '">Remove</button>' +
+        '</div>' +
+        '<div class="cart-item-total">$' + lineTotal + '</div>' +
+      '</div>';
+    }).join('');
+
+    var totalItems = getCartCount();
+    var totalPrice = getCartTotal().toFixed(2);
+
+    content.innerHTML =
+      '<h1>Shopping Cart</h1>' +
+      itemsHtml +
+      '<div class="cart-summary">' +
+        '<div class="row"><span>Items</span><span>' + totalItems + '</span></div>' +
+        '<div class="row total"><span>Total</span><span class="amount">$' + totalPrice + '</span></div>' +
+      '</div>' +
+      '<div class="cart-actions">' +
+        '<a href="index.html">Continue Shopping</a>' +
+        '<a href="checkout.html" class="btn-checkout">Proceed to Checkout</a>' +
+      '</div>';
+
+    // Wire quantity inputs
+    document.querySelectorAll('.qty-input').forEach(function(input) {
+      input.addEventListener('change', function() {
+        var id = this.dataset.productId;
+        var newQty = parseInt(this.value) || 1;
+        updateQuantity(id, newQty);
+
+        // Dispatch update_cart event
+        tracker.dispatch({
+          action_name: 'update_cart',
+          event_attributes: {
+            object: { object_id: id, object_id_type: 'product' },
+            quantity: newQty
+          }
+        });
+
+        renderCart();
+        renderHeader();
+      });
+    });
+
+    // Wire remove buttons
+    document.querySelectorAll('[data-remove]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = this.dataset.productId;
+        removeFromCart(id);
+
+        // Canonical conversion event: resolves the originating query_id
+        // and ordinal from the recorded result click, if there was one.
+        tracker.trackResultEvent({
+          actionName: 'remove_from_cart',
+          objectId: id,
+          objectIdField: 'product_id'
+        });
+
+        renderCart();
+        renderHeader();
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    renderHeader();
+    initEventLog();
+    renderCart();
+
+    // Dispatch view event (tracker is available globally from tracker-setup.js)
+    var cart = getCart();
+    tracker.dispatch({
+      action_name: 'view',
+      event_attributes: {
+        cart_items: cart.length,
+        cart_total: getCartTotal()
+      }
+    });
+  });
+  </script>
+</body>
+</html>

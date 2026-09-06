@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in the tracker does not behave as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems should not be filed here. See
+        [SECURITY.md](https://github.com/releval/tracker/blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Tracker version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build
+    attributes:
+      label: Which build
+      options:
+        - ESM (bundler)
+        - CommonJS
+        - IIFE (script tag)
+        - React adapter (@releval/tracker/react)
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and framework
+      placeholder: "Chrome 141, React 19 + Vite"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: >
+        The smallest page or snippet that shows the problem. The examples under
+        `examples/` are a good starting point to fork.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug output
+      description: >
+        Output with `debug: true` in the tracker options, and the request body
+        the tracker sent, if the problem is about what is delivered.
+      render: text

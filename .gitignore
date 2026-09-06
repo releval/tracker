@@ -1,0 +1,36 @@
+# OS junk files
+[Tt]humbs.db
+*.DS_Store
+
+# Editor/IDE
+.vs/
+.idea
+*.bak
+
+# Dependencies
+node_modules
+
+# Build output
+/examples/react-spa/dist/*
+/src/tracker/dist/*
+/src/tracker/obj/
+
+# Copied into src/tracker/ by prepack for npm publishing
+/src/tracker/LICENSE
+/src/tracker/README.md
+/build/
+
+# Test
+coverage/
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# Integration test (Testcontainers) run artifact
+integration/.harness.json
+
+# Claude Code
+.claude/
+

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkout - RelevalTech Store</title>
+  <script defer src="../../src/tracker/dist/releval-tracker.global.js"></script>
+  <script defer src="shared.js"></script>
+  <script defer src="tracker-setup.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="site-header" class="header"></header>
+
+  <div id="content" class="container container-wide"></div>
+
+  <button id="event-log-toggle" class="event-log-toggle">Events <span id="event-count" class="badge">0</span></button>
+  <div id="event-log-panel" class="event-log-panel">
+    <div class="event-log-header">
+      <div class="event-log-header-row">
+        <h3>Event Log</h3>
+        <button id="event-log-clear" class="event-log-clear">Clear</button>
+      </div>
+      <div id="event-log-ids" class="event-log-ids"></div>
+    </div>
+    <div id="event-log-entries" class="event-log-entries"></div>
+  </div>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    renderHeader();
+    initEventLog();
+
+    var content = document.getElementById('content');
+    var cart = getCart();
+
+    // Redirect to cart if empty
+    if (cart.length === 0) {
+      window.location.href = 'cart.html';
+      return;
+    }
+
+    var total = getCartTotal();
+    var itemCount = getCartCount();
+
+    // Build order summary items
+    var summaryItemsHtml = cart.map(function(item) {
+      var p = getProduct(item.productId);
+      if (!p) return '';
+      return '<div class="summary-item">' +
+        '<span class="item-name">' + p.name + '</span>' +
+        '<span class="item-qty">&times;' + item.quantity + '</span>' +
+        '<span class="item-total">$' + (p.price * item.quantity).toFixed(2) + '</span>' +
+      '</div>';
+    }).join('');
+
+    content.innerHTML =
+      '<h1>Checkout</h1>' +
+      '<div class="checkout-layout">' +
+        '<div class="checkout-form">' +
+          '<form id="checkout-form">' +
+            '<div class="form-group">' +
+              '<label for="full-name">Full Name</label>' +
+              '<input type="text" id="full-name" placeholder="John Doe" required>' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label for="email">Email</label>' +
+              '<input type="email" id="email" placeholder="john@example.com" required>' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label for="address">Address</label>' +
+              '<input type="text" id="address" placeholder="123 Main St" required>' +
+            '</div>' +
+            '<div class="form-row">' +
+              '<div class="form-group">' +
+                '<label for="city">City</label>' +
+                '<input type="text" id="city" placeholder="San Francisco" required>' +
+              '</div>' +
+              '<div class="form-group">' +
+                '<label for="zip">ZIP Code</label>' +
+                '<input type="text" id="zip" placeholder="94102" required>' +
+              '</div>' +
+            '</div>' +
+            '<button type="submit" class="btn-place-order">Place Order</button>' +
+          '</form>' +
+        '</div>' +
+        '<div class="order-summary">' +
+          '<div class="summary-box">' +
+            '<h2>Order Summary</h2>' +
+            summaryItemsHtml +
+            '<div class="summary-row"><span>Subtotal</span><span>$' + total.toFixed(2) + '</span></div>' +
+            '<div class="summary-row"><span>Shipping</span><span>Free</span></div>' +
+            '<div class="summary-total"><span>Total</span><span class="amount">$' + total.toFixed(2) + '</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Page-specific tracking (tracker is available globally from tracker-setup.js)
+
+    // Dispatch begin_checkout event
+    tracker.dispatch({
+      action_name: 'begin_checkout',
+      event_attributes: {
+        cart_items: itemCount,
+        cart_total: total
+      }
+    });
+
+    // Track shipping info when address field is filled
+    var addressField = document.getElementById('address');
+    var shippingTracked = false;
+    addressField.addEventListener('blur', function() {
+      if (this.value.trim() && !shippingTracked) {
+        shippingTracked = true;
+        tracker.dispatch({
+          action_name: 'add_shipping_info',
+          event_attributes: {
+            city: document.getElementById('city').value,
+            zip: document.getElementById('zip').value
+          }
+        });
+      }
+    });
+
+    // Handle form submission
+    document.getElementById('checkout-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      // One canonical purchase event per line item. Each resolves the
+      // query_id and ordinal recorded when that product's search result
+      // was clicked - a cart built from several searches attributes each
+      // item to its own query.
+      cart.forEach(function(item) {
+        tracker.trackResultEvent({
+          actionName: 'purchase',
+          objectId: item.productId,
+          objectIdField: 'product_id'
+        });
+      });
+
+      // Clear cart and show success
+      clearCart();
+
+      var orderId = 'NT-' + Date.now().toString(36).toUpperCase();
+      content.innerHTML =
+        '<div class="success-message">' +
+          '<h2>Order Confirmed!</h2>' +
+          '<p>Thank you for your purchase.</p>' +
+          '<p>Order ID: <span class="order-id">' + orderId + '</span></p>' +
+          '<p>Total: $' + total.toFixed(2) + ' (' + itemCount + ' items)</p>' +
+          '<a href="index.html" class="btn-home">Continue Shopping</a>' +
+        '</div>';
+
+      renderHeader();
+    });
+  });
+  </script>
+</body>
+</html>

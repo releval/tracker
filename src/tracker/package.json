@@ -1,0 +1,131 @@
+{
+  "name": "@releval/tracker",
+  "version": "1.0.0",
+  "description": "User Behavior Insights tracker for capturing events to help improve the website search experience.",
+  "main": "dist/releval-tracker.cjs",
+  "module": "dist/releval-tracker.mjs",
+  "types": "dist/releval-tracker.d.cts",
+  "type": "module",
+  "author": "Releval <hello@releval.co>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ubi",
+    "user-behavior-insights",
+    "analytics",
+    "tracking",
+    "click-tracking",
+    "impression-tracking",
+    "search-attribution",
+    "event-tracking"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/releval/tracker.git",
+    "directory": "src/tracker"
+  },
+  "homepage": "https://releval.co",
+  "bugs": "https://github.com/releval/tracker/issues",
+  "sideEffects": [
+    "./dist/releval-tracker.global.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/releval-tracker.d.mts",
+        "default": "./dist/releval-tracker.mjs"
+      },
+      "require": {
+        "types": "./dist/releval-tracker.d.cts",
+        "default": "./dist/releval-tracker.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.mts",
+        "default": "./dist/react.mjs"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
+    "./script": "./dist/releval-tracker.global.js"
+  },
+  "scripts": {
+    "prepack": "node scripts/prepack.mjs",
+    "prepublishOnly": "npm run build",
+    "watch": "tsc -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "generate:types": "node scripts/generate-types.mjs",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "docs:check": "typedoc"
+  },
+  "dependencies": {
+    "ulidx": "^2.3.0"
+  },
+  "peerDependencies": {
+    "react": ">=17"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@testing-library/react": "^16.3.3",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "jest": "^30.5.1",
+    "jest-environment-jsdom": "^30.5.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "ts-jest": "^29.4.12",
+    "tsdown": "^0.22.14",
+    "typedoc": "^0.28.20",
+    "typescript": "^5.9.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "jsdom",
+    "moduleFileExtensions": [
+      "ts",
+      "js"
+    ],
+    "transform": {
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "module": "CommonJS",
+            "moduleResolution": "Node"
+          }
+        }
+      ]
+    },
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ]
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "jsdelivr": "dist/releval-tracker.global.js",
+  "unpkg": "dist/releval-tracker.global.js"
+}

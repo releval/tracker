@@ -1,0 +1,94 @@
+{
+  "required": ["action_name"],
+  "description": "The core UBI event structure that is enriched and emitted to sinks.\n\nOnly `action_name` is required when dispatching - the dispatcher auto-sets\n`timestamp` and enrichers populate contextual fields like `application`,\n`session_id`, `client_id`, and browser/page metadata before the event\nreaches the sink.",
+  "properties": {
+    "application": {
+      "description": "Name of the application integrated with UBI. Distinguishes event sources\nwhen multiple search UIs feed into the same backend.",
+      "examples": ["primary-search", "type-ahead"]
+    },
+    "site_id": {
+      "type": "string",
+      "description": "The public Site identifier issued by Releval when registering a Site.\nStamped automatically by the OptionsEnricher from `TrackerOptions.siteId`.\nA Releval extension to the UBI schema: the server drops events whose\n`site_id` does not match a registered Site.",
+      "examples": ["01J8ZP4Q9K7X2M5N6R8T0V3W1Y"]
+    },
+    "action_name": {
+      "description": "The name of the action that triggered the event.\nCommon values: `\"click\"`, `\"add_to_cart\"`, `\"purchase\"`, `\"impression\"`, `\"view\"`, `\"watch\"`.\nAny custom string is also accepted."
+    },
+    "query_id": {
+      "description": "The unique identifier of the query that this event is associated with,\ntypically a UUID. Links events back to the originating search."
+    },
+    "session_id": {
+      "description": "The session identifier, used to correlate interactions across page navigations\nand to track unique visits for both authenticated and anonymous users.\nPopulated automatically by the SessionEnricher."
+    },
+    "client_id": {
+      "description": "A stable anonymous identifier for the client issuing events.\nThis could be a unique browser, a microservice, or a crawling bot.\nPopulated automatically by the ClientIdEnricher."
+    },
+    "user_id": {
+      "description": "The authenticated user identifier, if available.\nMay be `undefined` for anonymous/unauthenticated users."
+    },
+    "timestamp": {
+      "description": "When the event took place, formatted as an ISO 8601 date-time string.\nAuto-set by the dispatcher if not provided."
+    },
+    "message_type": {
+      "description": "Groups related `action_name` values into logical categories."
+    },
+    "message": {
+      "description": "Optional text message for the log entry. For a `message_type` of `\"QUERY\"`,\nthis would typically contain the search text."
+    },
+    "user_query": {
+      "description": "The query as the user entered it, before any normalization or processing."
+    },
+    "event_attributes": {
+      "description": "Contextual data attached to a tracked event describing what was interacted with\nand where it appeared on the page. Additional custom properties can be added via\nthe index signature.",
+      "required": [],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "description": "A stable per-event identifier, set once by the dispatcher when the event\nis created. A Releval extension to the UBI schema. It lives under\n`event_attributes` because that is where the server preserves unknown\nfields, so delivery retries (which can duplicate) stay deduplicable in\nanalysis: `LIMIT 1 BY event_attributes.event_id`.",
+          "examples": ["01J8ZP4Q9K7X2M5N6R8T0V3W1Y"]
+        },
+        "tracker": {
+          "description": "The tracker build that produced the event (`{ version }`), stamped by the\ndispatcher. A Releval extension, for supportability once several tracker\nversions are deployed across customer sites."
+        },
+        "object": {
+          "description": "Identifies the object (e.g. product, document) that was interacted with.\nAdditional custom properties can be added via the index signature.",
+          "properties": {
+            "object_id": {
+              "type": "string",
+              "description": "The identifier that uniquely locates the object within the document corpus.\nVariants should be incorporated, so for a red t-shirt use the SKU-level identifier.\nAlways a string on the wire: the Releval server binds it strictly and rejects\nthe whole batch when a number arrives.",
+              "examples": ["XYZ-12345", "ISBN 0-061-96436-0"]
+            },
+            "object_id_type": {
+              "description": "The type/namespace of the object identifier.\nCommon values: `\"product\"`, `\"user\"`, `\"post\"`, `\"comment\"`, `\"video\"`."
+            },
+            "object_id_field": {
+              "description": "The name of the field that stores the object identifier in the backend data store.\nIf omitted, the search index's default primary identifier is used (e.g. `_id` in OpenSearch)."
+            },
+            "internal_id": {
+              "type": "string",
+              "description": "The internal identifier that the search engine uses to index the object.\nFor example, the `_id` field in OpenSearch indices - pass numeric ids as\nstrings. Always a string on the wire: the Releval server binds it strictly\nand a number would reject the whole batch, the same hole `object_id` closes."
+            }
+          }
+        },
+        "position": {
+          "description": "Describes where an interaction occurred relative to other items on the page.\nUse `ordinal` for list/grid rank and `x`/`y` for coordinate-based positioning.\nAdditional custom properties can be added via the index signature.",
+          "properties": {
+            "ordinal": {
+              "type": "integer",
+              "description": "The absolute, 1-based rank of the item across pagination:\n`(page - 1) * pageSize + positionOnPage` with `page` 1-based. It must equal\nindex + 1 of the object in the `query_response_hit_ids` the backend sent to\ntrack-query for this `query_id`. For grid layouts this is left to right,\nignoring wrapping.",
+              "examples": [1, 21]
+            },
+            "x": {
+              "type": "number",
+              "description": "The x coordinate on the screen where the event was triggered.\nMatches the Releval server's flat `x` field."
+            },
+            "y": {
+              "type": "number",
+              "description": "The y coordinate on the screen where the event was triggered.\nMatches the Releval server's flat `y` field."
+            }
+          }
+        }
+      }
+    }
+  }
+}

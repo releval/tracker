@@ -59,3 +59,40 @@ test("the built browser tracker delivers a result click to Releval with the serv
   const query = await waitForQuery(info.clickHouseUrl, info.queryId);
   expect(query.user_query).toBe(info.query);
 });
+
+test("a result click that navigates away still reaches Releval", async ({
+  page,
+}) => {
+  const info = readHarnessInfo();
+  // Its own query_id so the assertion cannot pick up a click from another test.
+  const queryId = `nav-${Date.now()}`;
+
+  const url =
+    `${PAGE_ORIGIN}/integration/fixtures/tracker-nav-page.html` +
+    `?endpoint=${encodeURIComponent(info.appBaseUrl)}` +
+    `&siteId=${encodeURIComponent(info.siteId)}` +
+    `&queryId=${encodeURIComponent(queryId)}` +
+    `&query=${encodeURIComponent("smart watch")}`;
+
+  await page.goto(url);
+  await page.waitForFunction(
+    () => (window as unknown as { __trackerReady?: boolean }).__trackerReady,
+  );
+
+  // The terminal click: the anchor navigates, so the event is queued and the
+  // page is gone microseconds later. Delivery has to happen on the unload path.
+  await Promise.all([
+    page.waitForURL(/destination\.html/),
+    page.click("#result-link"),
+  ]);
+  await expect(page.locator("#destination")).toBeVisible();
+
+  // A navigator.sendBeacon carrying an application/json Blob is dropped
+  // cross-origin after reporting success, which silently loses exactly this
+  // event - the one every click-through rate is computed from.
+  const row = await waitForEvent(info.clickHouseUrl, queryId, "click");
+  expect(row.action_name).toBe("click");
+  expect(row.site_id).toBe(info.siteId);
+  expect(row.attrs).toContain('"NT-002"');
+  expect(row.attrs).toContain('"ordinal"');
+});

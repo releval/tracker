@@ -1,6 +1,6 @@
 {
   "name": "@releval/tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "User Behavior Insights tracker for capturing events to help improve the website search experience.",
   "main": "dist/releval-tracker.cjs",
   "module": "dist/releval-tracker.mjs",

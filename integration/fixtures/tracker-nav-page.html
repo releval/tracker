@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ubi-tracker navigation fixture</title>
+    <script src="/src/tracker/dist/releval-tracker.global.js"></script>
+  </head>
+  <body>
+    <h1>Search results</h1>
+    <!-- A server-rendered results grid, the multi-page shape: the container
+         carries the query_id and each result is an anchor that navigates. The
+         click has to survive the unload it triggers. -->
+    <ul id="results" data-query-id="" data-query="">
+      <li>
+        <a
+          id="result-link"
+          href="/integration/fixtures/destination.html"
+          data-object-id="NT-002"
+          data-ordinal="2"
+        >
+          Photon Smart Watch
+        </a>
+      </li>
+    </ul>
+
+    <script>
+      var params = new URLSearchParams(location.search);
+      var results = document.getElementById("results");
+      results.setAttribute("data-query-id", params.get("queryId"));
+      results.setAttribute("data-query", params.get("query") || "");
+
+      var tracker = new Releval.Tracker({
+        application: "integration-test",
+        siteId: params.get("siteId"),
+        endpointHost: params.get("endpoint"),
+      });
+
+      // The declarative collector, as a server-rendered site would use it.
+      tracker.trackResultClicks({
+        selector: "[data-query-id] [data-object-id]",
+      });
+
+      tracker.start();
+      window.__trackerReady = true;
+    </script>
+  </body>
+</html>

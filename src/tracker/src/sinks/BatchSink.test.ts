@@ -259,9 +259,10 @@ describe("BatchSink", () => {
     });
   });
 
-  describe("beacon API (page unload)", () => {
-    it("sends via beacon on visibilitychange to hidden", () => {
-      // jsdom's Blob has no .text(), so capture the serialized body via a subclass.
+  describe("unload delivery", () => {
+    it("sends via keepalive fetch on visibilitychange to hidden", () => {
+      // Kept from when this path used a Blob, so a regression back to
+      // sendBeacon would still be caught by the assertions below.
       const captured: string[] = [];
       const RealBlob = global.Blob;
       class CapturingBlob extends RealBlob {
@@ -276,6 +277,7 @@ describe("BatchSink", () => {
         const sink = createSink();
         sink.emit(createEvent());
         sink.emit(createEvent());
+        fetchMock.mockClear();
 
         // Simulate visibilitychange to hidden
         Object.defineProperty(document, "visibilityState", {
@@ -285,15 +287,17 @@ describe("BatchSink", () => {
         });
         document.dispatchEvent(new Event("visibilitychange"));
 
-        expect(sendBeaconMock).toHaveBeenCalledTimes(1);
-        const blob: Blob = sendBeaconMock.mock.calls[0][1];
-        expect(sendBeaconMock.mock.calls[0][0]).toBe(
+        expect(sendBeaconMock).not.toHaveBeenCalled();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls[0][0]).toBe(
           "https://api.example.com/api/v1/ubi/track-event",
         );
-        expect(blob).toBeInstanceOf(RealBlob);
-        const beaconBody = JSON.parse(captured[0]);
-        expect(Array.isArray(beaconBody.events)).toBe(true);
-        expect(beaconBody.events).toHaveLength(2);
+        const init = fetchMock.mock.calls[0][1];
+        expect(init.keepalive).toBe(true);
+        expect(init.headers["Content-Type"]).toBe("application/json");
+        const body = JSON.parse(init.body);
+        expect(Array.isArray(body.events)).toBe(true);
+        expect(body.events).toHaveLength(2);
         expect(sink.pendingCount).toBe(0);
 
         sink.dispose();
@@ -416,9 +420,11 @@ describe("BatchSink", () => {
       const sink = createSink({ flushIntervalMs: 500 });
       sink.emit(createEvent());
       sink.dispose();
+      // dispose() delivers the remainder over the unload path, which is now a
+      // keepalive fetch; clear it so the timer is the only thing under test.
+      fetchMock.mockClear();
 
       jest.advanceTimersByTime(1000);
-      // Beacon is called on dispose, but fetch should not be called from timer
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -454,29 +460,51 @@ describe("BatchSink", () => {
   });
 
   describe("delivery hardening", () => {
-    it("flushes via beacon on pagehide (Safari terminal-click path)", () => {
-      const sink = createSink();
-      sink.emit(createEvent());
-
-      window.dispatchEvent(new Event("pagehide"));
-
-      expect(sendBeaconMock).toHaveBeenCalledTimes(1);
-      expect(sink.pendingCount).toBe(0);
-      sink.dispose();
-    });
-
-    it("falls back to keepalive fetch when sendBeacon returns false", () => {
-      sendBeaconMock.mockReturnValue(false);
+    it("flushes via keepalive fetch on pagehide (the terminal-click path)", () => {
       const sink = createSink();
       sink.emit(createEvent());
       fetchMock.mockClear();
 
       window.dispatchEvent(new Event("pagehide"));
 
-      expect(sendBeaconMock).toHaveBeenCalledTimes(1);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock.mock.calls[0][1].keepalive).toBe(true);
+      expect(sink.pendingCount).toBe(0);
       sink.dispose();
+    });
+
+    it("never uses sendBeacon for the terminal click when fetch is available", () => {
+      // A beacon posts an application/json Blob, which is not CORS-safelisted,
+      // so cross-origin the browser drops it after sendBeacon has already
+      // returned true. "Queued" is not "delivered", nothing falls back, and the
+      // click that CTR depends on is lost. Reporting to another origin is the
+      // normal deployment, so the beacon must not be reached here.
+      const sink = createSink();
+      sink.emit(createEvent());
+      fetchMock.mockClear();
+
+      window.dispatchEvent(new Event("pagehide"));
+
+      expect(sendBeaconMock).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      sink.dispose();
+    });
+
+    it("falls back to sendBeacon when fetch is unavailable", () => {
+      const realFetch = global.fetch;
+      // @ts-expect-error - modelling an environment without fetch
+      delete global.fetch;
+      try {
+        const sink = createSink();
+        sink.emit(createEvent());
+
+        window.dispatchEvent(new Event("pagehide"));
+
+        expect(sendBeaconMock).toHaveBeenCalledTimes(1);
+        sink.dispose();
+      } finally {
+        global.fetch = realFetch;
+      }
     });
 
     it("sends the normal flush without keepalive (reserves the keepalive budget for unload)", async () => {

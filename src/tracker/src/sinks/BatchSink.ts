@@ -187,7 +187,7 @@ export class BatchSink implements Sink {
 
     // Best-effort flush of remaining events
     if (this.queue.length > 0) {
-      this.sendViaBeacon(this.queue);
+      this.sendOnUnload(this.queue);
       this.queue = [];
     }
   }
@@ -204,7 +204,7 @@ export class BatchSink implements Sink {
       // may be frozen and discarded (mobile Chrome/Android can discard without
       // ever firing pagehide), so flush the queue and persist in-flight retries
       // here too, not only on pagehide.
-      this.flushViaBeacon();
+      this.flushOnUnload();
       this.persistPendingRetries();
     } else if (document.visibilityState === "visible") {
       // The page came back rather than being discarded; resume the persisted
@@ -215,7 +215,7 @@ export class BatchSink implements Sink {
   }
 
   private onPageHide(event: PageTransitionEvent): void {
-    this.flushViaBeacon();
+    this.flushOnUnload();
     // On a real unload (not bfcache), in-memory retry timers will die with the
     // page, so persist any pending retry batches for the next page load. On a
     // bfcache entry (event.persisted) the page may resume with its timers
@@ -238,14 +238,53 @@ export class BatchSink implements Sink {
   }
 
   /**
-   * Flush all queued events using the Beacon API (reliable on page unload).
+   * Flush all queued events on page unload.
    */
-  private flushViaBeacon(): void {
+  private flushOnUnload(): void {
     if (this.queue.length === 0) return;
 
     const batch = this.queue;
     this.queue = [];
-    this.sendViaBeacon(batch);
+    this.sendOnUnload(batch);
+  }
+
+  /**
+   * Deliver a batch while the page is going away.
+   *
+   * A keepalive fetch leads here rather than `navigator.sendBeacon`, which
+   * inverts the usual advice (web.dev and friends all show beacon first). The
+   * reason is the payload: those examples pass a string, which a beacon sends
+   * as `text/plain` - CORS-safelisted, so it crosses origins fine. This one
+   * posts a Blob typed `application/json`, and Chromium disabled sendBeacon for
+   * Blob types that are not CORS-safelisted back in Chrome 60, as CSRF
+   * hardening. Cross-origin the beacon is dropped, and `sendBeacon` has already
+   * returned `true` by then - which only ever meant "queued", never
+   * "delivered", so nothing fell back and the terminal result click was lost.
+   * Reporting to another origin is the normal deployment, so this path has to
+   * be the reliable one.
+   *
+   * A keepalive fetch is a real CORS request, survives unload, and resolves, so
+   * a failure persists for the next page load instead of vanishing.
+   *
+   * Deliberately no feature test for `keepalive` itself, even though Firefox
+   * only honoured it from 133 and silently ignores it before that. An ignored
+   * `keepalive` degrades to a fetch the browser cancels on unload, which often
+   * still delivers because the bytes are already on the wire; falling back to
+   * the beacon instead would pick the transport measured to be dead for this
+   * payload. `sendBeacon` is therefore kept only for a runtime with no `fetch`
+   * at all.
+   *
+   * The conventional fix is to send the beacon as a string and have the server
+   * accept `text/plain`; that needs a change on the server, which answers 415
+   * today.
+   */
+  private sendOnUnload(events: UbiEvent[]): void {
+    if (typeof fetch === "function") {
+      this.sendViaKeepaliveFetch(events);
+      return;
+    }
+
+    this.sendViaBeacon(events);
   }
 
   private sendViaBeacon(events: UbiEvent[]): void {
